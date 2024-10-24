@@ -194,7 +194,6 @@ st.sidebar.markdown(f"""
 """, unsafe_allow_html=True)
 
 
-# 메인 앱 함수
 def main():
     # 제목과 이미지를 나란히 배치
     col1, col2 = st.columns([3, 1])
@@ -203,7 +202,7 @@ def main():
         st.write("")
         st.markdown("""
         ##### 스팸 메시지를 단순히 차단하는 것에 그치지 않고 그 메시지의 내부를 "열어" 구조와 내용을 분석하는 특성을 담고 있습니다. 
-        ##### 이 프로그램은 스팸 메시지의 위험성을 세밀하게 해부하여 사용자에게 안전한 정보를 제공하는 "열쇠" 역할을 합니다.""") # 열쇠에서 대놓고 오프너로 바꾸는건 어땡?
+        ##### 이 프로그램은 스팸 메시지의 위험성을 세밀하게 해부하여 사용자에게 안전한 정보를 제공하는 "오프너" 역할을 합니다.""")
         
     with col2:
         st.image("spam_opener.png", width=150)
@@ -220,18 +219,13 @@ def main():
     if 'new_message_added' not in st.session_state:
         st.session_state.new_message_added = False
 
+    # 새로운 메시지 확인하기 버튼
     if st.button("새로운 메시지 확인하기"):
         external_data = get_external_data()  # 최신 메시지 가져오기
         if external_data:
-            # external_data는 리스트 안에 튜플 형태로 되어 있으므로, 첫 번째 튜플의 첫 번째 요소를 가져옵니다.
             message_text = external_data[0][0]  # 메시지 텍스트 추출
             st.session_state.messages.append({"role": "user", "content": message_text, "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
             st.session_state.new_message_added = True  # 메시지 추가됨을 추적
-
-    # # 외부 데이터로 시작
-    # if not st.session_state.messages:
-    #     external_data = get_external_data()
-    #     st.session_state.messages.append({"role": "user", "content": external_data, "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
 
     # 채팅 창
     chat_container = st.container()
@@ -242,7 +236,6 @@ def main():
                 st.markdown(f'<div class="message user-message">{message["content"]}<div class="timestamp">{message["timestamp"]}</div></div>', unsafe_allow_html=True)
             else:
                 analysis_class = message.get("analysis_class", "safe")
-                
                 st.markdown(f'''
                 <div class="message ai-message">
                     {message["content"]}
@@ -252,14 +245,9 @@ def main():
                 ''', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # OpenAI API 키 설정
-    # openai.api_key = os.getenv("OPENAI_API_KEY")
+        # OpenAI API 키 설정
     auth_path = yaml.safe_load(open('/Users/kong/Desktop/Codes/auth.yml', encoding='utf-8'))
     os.environ["OPENAI_API_KEY"] = auth_path['OpenAI']['key']
-
-    # if not openai.api_key:
-    #     # st.error("OpenAI API 키가 설정되지 않았습니다. .env 파일에 OPENAI_API_KEY를 설정해주세요.")
-    #     # st.stop()
 
     # 파일 경로 설정 및 텍스트 파일 로드
     spam_path = 'spam_text.txt'
@@ -272,16 +260,22 @@ def main():
         {"role": "user", "content": spam_text}
     ]
     first_response = pattern_recognition(client, messages_list)
-
-    # 스팸 여부 확인 버튼
+    
+    # 스팸 여부 확인 및 결과 저장
     if st.session_state.new_message_added:
-    # if st.button('스팸 여부 확인'):
         last_message = st.session_state.messages[-1]['content']
         with st.spinner('AI가 메시지를 분석 중입니다...'):
             try:
                 result = spam_reasoning(client, messages_list, first_response, last_message, temperature=0.0)
-                #result = pattern_recognition(last_message, "Yes" if "스팸" in spam_text else "No")
-                if result in "Danger":
+
+                # 스팸 여부 분석 후 결과 저장
+                st.session_state.results.append({
+                    "message": last_message,
+                    "result": result
+                })
+
+                # 결과에 따라 맞는 스타일로 출력
+                if "Danger" in result:
                     st.error("Danger🚨 주의! AI 분석 결과, 이 메시지는 스팸일 가능성이 높습니다.")
                     st.write("Zero-Shot with Auto-Generated Prompt로 스팸을 탐지했습니다.")
                     split_result = result.split('1.')
@@ -289,9 +283,9 @@ def main():
                         reasoning_part = split_result[-1]  # 추론 부분을 선택
                     else:
                         reasoning_part = result  # split되지 않은 경우 전체 결과 사용
+                    st.write('1.', reasoning_part)
 
-                    st.write('1.',reasoning_part)
-                elif result in "Warning":
+                elif "Warning" in result:
                     st.warning("Warning⚠️ AI 분석 결과, 이 메시지는 스팸일 가능성이 있습니다.")
                     st.write("Zero-Shot with Auto-Generated Prompt로 스팸을 탐지했습니다.")
                     split_result = result.split('1.')
@@ -299,51 +293,79 @@ def main():
                         reasoning_part = split_result[-1]  # 추론 부분을 선택
                     else:
                         reasoning_part = result  # split되지 않은 경우 전체 결과 사용
+                    st.write('1.', reasoning_part)
 
-                    st.write('1.',reasoning_part)
-
-                elif result in "Safe":
+                elif "Safe" in result:
                     st.success("Safe✅ AI 분석 결과, 이 메시지는 정상으로 보입니다.")
-                
-            # # 결과 분석
-            # if "danger" in result.lower():
-            #     analysis = "Danger🚨 주의! AI 분석 결과, 이 메시지는 스팸일 가능성이 높습니다."
-            #     analysis_class = "danger"
-            # elif "warning" in result.lower():
-            #     analysis = "Warning⚠️ AI 분석 결과, 이 메시지는 스팸일 가능성이 있습니다."
-            #     analysis_class = "warning"
-            # else:
-            #     analysis = "Safe✅ AI 분석 결과, 이 메시지는 정상으로 보입니다."
-            #     analysis_class = "safe"
-            
-            # # AI 응답 추가
-            # ai_response = {
-            #     "role": "assistant", 
-            #     "content": result, 
-            #     "analysis": analysis,
-            #     "analysis_class": analysis_class,
-            #     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            # }
-            # st.session_state.messages.append(ai_response)
-            
-            # # 상세 정보 (스팸으로 판단될 때만)
-            # if analysis_class in ["danger", "warning"]:
-            #     with st.expander("상세 정보 보기"):
-            #         st.subheader("스팸 탐지 이유")
-            #         reason = get_spam_detection_reason(result)
-            #         st.write(reason)
-            
-            # st.experimental_rerun()
-            
+
             except Exception as e:
                 st.error(f"API 호출 중 오류가 발생했습니다: {str(e)}")
-        # 과거 분석 결과 출력
+
+
     if st.session_state.results:
-        st.subheader("이전 분석 결과")
-        for entry in st.session_state.results:
-            st.markdown(f"**메시지**: {entry['message']}")
-            st.markdown(f"**분석 결과**: {entry['result']}")
-            st.markdown("---")
+        st.subheader("분석 결과")
+        for idx, entry in enumerate(st.session_state.results):
+            with st.expander(f"메시지 {idx + 1}"):
+                st.markdown(f"**메시지 내용**: {entry['message']}")
+                st.markdown(f"**분석 결과**: {entry['result']}")
+
+
+    # if st.session_state.results:
+    #     st.subheader("분석 결과")
+    #     for idx, entry in enumerate(st.session_state.results):
+    #         st.markdown(f"**메시지 {idx + 1}**: {entry['message']}")
+    #         st.markdown(f"**분석 결과**: {entry['result']}")
+    #         st.markdown("---")
+
+    # # OpenAI API 키 설정
+    # auth_path = yaml.safe_load(open('/Users/kong/Desktop/Codes/auth.yml', encoding='utf-8'))
+    # os.environ["OPENAI_API_KEY"] = auth_path['OpenAI']['key']
+
+    # # 파일 경로 설정 및 텍스트 파일 로드
+    # spam_path = 'spam_text.txt'
+    # spam_text = load_txt(spam_path)
+
+    # client = openai.OpenAI()
+    # prompt, _ = load_prompts()
+    # messages_list = [
+    #     {"role": "system", "content": prompt},
+    #     {"role": "user", "content": spam_text}
+    # ]
+    # first_response = pattern_recognition(client, messages_list)
+    
+    # # 스팸 여부 확인 및 결과 저장
+    # if st.session_state.new_message_added:
+    #     last_message = st.session_state.messages[-1]['content']
+    #     with st.spinner('AI가 메시지를 분석 중입니다...'):
+    #         try:
+    #             result = spam_reasoning(client, messages_list, first_response, last_message, temperature=0.0)
+                
+    #             # 스팸 여부 분석 후 결과 저장
+    #             st.session_state.results.append({
+    #                 "message": last_message,
+    #                 "result": result
+    #             })
+
+    #         except Exception as e:
+    #             st.error(f"API 호출 중 오류가 발생했습니다: {str(e)}")
+
+    # # 현재 저장된 모든 결과 출력
+    # if st.session_state.results:
+    #     st.subheader("분석 결과")
+    #     for idx, entry in enumerate(st.session_state.results):
+    #         st.markdown(f"**메시지 {idx + 1}**: {entry['message']}")
+            
+    #         # 결과에 따라 맞는 스타일로 출력
+    #         if "Danger" in entry['result']:
+    #             st.error(f"**결과 {idx + 1}**: Danger🚨 주의! 이 메시지는 스팸일 가능성이 높습니다.")
+    #         elif "Warning" in entry['result']:
+    #             st.warning(f"**결과 {idx + 1}**: Warning⚠️ 이 메시지는 스팸일 가능성이 있습니다.")
+    #         elif "Safe" in entry['result']:
+    #             st.success(f"**결과 {idx + 1}**: Safe✅ 이 메시지는 정상입니다.")
+
+    #         st.markdown("---")  # 구분선을 추가하여 각 메시지와 결과를 구분
+
+
 
 if __name__ == "__main__":
     main()
